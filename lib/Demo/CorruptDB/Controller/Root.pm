@@ -5,9 +5,17 @@ use namespace::autoclean;
 BEGIN { extends 'Catalyst::Controller' }
 
 use DateTime;
-use DB_File;
-#use ANYDBM_File;
+BEGIN {
+    # @AnyDBM_File::ISA = qw(DB_File) # Breaks
+    # @AnyDBM_File::ISA = qw(GDBM_File) # Breaks
+    # @AnyDBM_File::ISA = qw(NDBM_File) # Works...Locks?
+    # @AnyDBM_File::ISA = qw(ODBM_File) # Breaks
+}
+use AnyDBM_File;
+use Fcntl; # needed for O_ thingies
 
+use Data::Random qw(:all);
+ 
 #
 # Sets the actions in this controller to be registered with no prefix
 # so they function identically to actions created in MyApp.pm
@@ -35,21 +43,23 @@ The root page (/)
 sub index :Path :Args(0) {
     my ( $self, $c ) = @_;
 
-    dbmopen(my %DB, '/tmp/corruptdb', 0666 );
+    tie my %DB, 'AnyDBM_File', '/tmp/corruptdb', O_RDWR|O_CREAT, 0666;
 
-    my $rand = int( rand( 100000 ) );
+    my $key = join(' ', rand_words( size => 120 ) );
+    my $val = $key;
 
-    my $now = DateTime->now;
+    $DB{$key} = $val;
 
-    $DB{$rand} = $now;
+    my $res = $DB{$key};
 
-    my $res = $DB{$rand};
-
-    dbmclose %DB;
+    untie %DB;
 
     my $answer;
-    unless( defined($res) ) {
+    if ( !defined($res) ) {
         $answer = "DB corruption detected: res is undef!\n";
+        print STDERR $answer;
+    } elsif ( $res ne $val ) {
+	$answer = "DB corruption detected: incorrect data returned!\n";
         print STDERR $answer;
     } else {
         $answer = "Answer from: $$ is $res";
