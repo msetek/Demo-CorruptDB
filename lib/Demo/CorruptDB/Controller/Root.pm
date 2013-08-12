@@ -8,11 +8,14 @@ use DateTime;
 BEGIN {
     # @AnyDBM_File::ISA = qw(DB_File) # Breaks
     # @AnyDBM_File::ISA = qw(GDBM_File) # Breaks
-    # @AnyDBM_File::ISA = qw(NDBM_File) # Works...Locks?
+    @AnyDBM_File::ISA = qw(NDBM_File) # Works...Locks by default?
     # @AnyDBM_File::ISA = qw(ODBM_File) # Breaks
 }
 use AnyDBM_File;
 use Fcntl; # needed for O_ thingies
+
+use CHI;
+use CHI::Driver::Memcached::libmemcached;
 
 use Data::Random qw(:all);
  
@@ -67,6 +70,38 @@ sub index :Path :Args(0) {
 
     $c->response->body( $answer );
 
+}
+
+sub memcached : Local :Args(0) {
+    my ( $self, $c ) = @_;
+    
+    my $cache = CHI->new(
+	# driver  => 'Memcached', # works
+	# driver  => 'Memcached::Fast', # works
+	driver => 'Memcached::libmemcached',
+	namespace => 'testing',
+	servers => [ '127.0.0.1:11211' ]
+    );
+
+    my $key = join(' ', rand_words( size => 120 ) );
+    my $val = $key;
+
+    $cache->set($key, $val, 'never');
+
+    my $res = $cache->get($key);
+
+    my $answer;
+    if ( !defined($res) ) {
+        $answer = "Cache corruption detected: res is undef!\n";
+        print STDERR $answer;
+    } elsif ( $res ne $val ) {
+	$answer = "Cache corruption detected: incorrect data returned!\n";
+        print STDERR $answer;
+    } else {
+        $answer = "Answer from: $$ is $res";
+    }
+
+    $c->response->body( $answer );
 }
 
 =head2 default
