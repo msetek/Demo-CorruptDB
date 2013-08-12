@@ -4,6 +4,10 @@ use namespace::autoclean;
 
 BEGIN { extends 'Catalyst::Controller' }
 
+use DateTime;
+use DB_File;
+#use ANYDBM_File;
+
 #
 # Sets the actions in this controller to be registered with no prefix
 # so they function identically to actions created in MyApp.pm
@@ -31,8 +35,28 @@ The root page (/)
 sub index :Path :Args(0) {
     my ( $self, $c ) = @_;
 
-    # Hello World
-    $c->response->body( $c->welcome_message );
+    dbmopen(my %DB, '/tmp/corruptdb', 0666 );
+
+    my $rand = int( rand( 100000 ) );
+
+    my $now = DateTime->now;
+
+    $DB{$rand} = $now;
+
+    my $res = $DB{$rand};
+
+    dbmclose %DB;
+
+    my $answer;
+    unless( defined($res) ) {
+        $answer = "DB corruption detected: res is undef!\n";
+        print STDERR $answer;
+    } else {
+        $answer = "Answer from: $$ is $res";
+    }
+
+    $c->response->body( $answer );
+
 }
 
 =head2 default
