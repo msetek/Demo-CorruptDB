@@ -6,9 +6,9 @@ BEGIN { extends 'Catalyst::Controller' }
 
 use DateTime;
 BEGIN {
-    # @AnyDBM_File::ISA = qw(DB_File) # Breaks 
+    @AnyDBM_File::ISA = qw(DB_File) # Breaks 
     # @AnyDBM_File::ISA = qw(GDBM_File) # Breaks (not found on OSX)
-    @AnyDBM_File::ISA = qw(NDBM_File) # Breaks, but only sometimes. Locks up with 100% CPU usage (siege without -c) or children crash.
+    # @AnyDBM_File::ISA = qw(NDBM_File) # Breaks, but only sometimes. Locks up with 100% CPU usage (siege without -c) or children crash.
     # @AnyDBM_File::ISA = qw(ODBM_File) # Breaks (not found on OSX)
 }
 use AnyDBM_File;
@@ -52,23 +52,16 @@ sub index :Path :Args(0) {
     my ($key, $val) = _gen_key_val;
 
     $DB{$key} = $val;
-
     my $res = $DB{$key};
 
     untie %DB;
 
-    my $answer = 'Testing: ' . join(', ', @AnyDBM_File::ISA) . "\n";
-    if ( !defined($res) ) {
-        $answer .= "DB corruption detected: res is undef!\n";
-        print STDERR $answer;
-    } elsif ( $res ne $val ) {
-	$answer .= "DB corruption detected: incorrect data returned!\n";
-        print STDERR $answer;
-    } else {
-        $answer .= "Answer from: $$ is $res";
-    }
+    $c->stash( implementation => join(', ', @AnyDBM_File::ISA) );
+    $c->stash( key => $key );
+    $c->stash( result => $res );
 
-    $c->response->body( $answer );
+    $c->detach( 'show_answer' );
+
 
 }
 
@@ -84,21 +77,13 @@ sub memcached :Local {
     my ($key, $val) = _gen_key_val;
 
     $cache->set($key, $val, 'never');
-
     my $res = $cache->get($key);
 
-    my $answer;
-    if ( !defined($res) ) {
-        $answer = "Cache corruption detected: res is undef!\n";
-        print STDERR $answer;
-    } elsif ( $res ne $val ) {
-	$answer = "Cache corruption detected: incorrect data returned!\n";
-        print STDERR $answer;
-    } else {
-        $answer = "Answer from: $$ is $res";
-    }
+    $c->stash( implementation => $cache->short_driver_name );
+    $c->stash( key => $key );
+    $c->stash( result => $res );
 
-    $c->response->body( $answer );
+    $c->detach( 'show_answer' );
 }
 
 sub _gen_key_val {
@@ -108,6 +93,29 @@ sub _gen_key_val {
     my $val = $key;
 
     return ($key, $val);
+}
+
+sub show_answer :Private {
+    my ($self, $c) = @_;
+
+    my $implementation = $c->stash->{implementation};
+    my $answer = "Testing: $implementation\n";
+
+    my $key = $c->stash->{key};
+    my $res = $c->stash->{result};
+
+    if ( !defined($res) ) {
+        $answer .= "$implementation corruption detected: res is undef!\n";
+        warn "$answer";
+    } elsif ( $res ne $key ) {
+	$answer .= "$implementation corruption detected: incorrect data returned!\n";
+        warn "$answer";
+    } else {
+        $answer .= "Answer from: $$ is $res";
+    }
+
+    $c->res->header( 'Content-Type' => 'text/plain' );
+    $c->response->body( $answer );
 }
 
 =head2 default
