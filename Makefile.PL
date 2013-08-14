@@ -17,6 +17,8 @@ requires 'Moose';
 requires 'namespace::autoclean';
 requires 'Data::Random';
 requires 'CHI';
+requires 'CHI::Driver::Memcached::libmemcached';
+requires 'Cache::Memcached::libmemcached';
 requires 'Memcached::libmemcached';
 requires 'Data::Random';
 requires 'Config::General'; # This should reflect the config file format you've chosen
