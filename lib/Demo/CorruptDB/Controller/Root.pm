@@ -6,10 +6,10 @@ BEGIN { extends 'Catalyst::Controller' }
 
 use DateTime;
 BEGIN {
-    # @AnyDBM_File::ISA = qw(DB_File) # Breaks
-    # @AnyDBM_File::ISA = qw(GDBM_File) # Breaks
-    @AnyDBM_File::ISA = qw(NDBM_File) # Breaks, but only sometimes?
-    # @AnyDBM_File::ISA = qw(ODBM_File) # Breaks
+    # @AnyDBM_File::ISA = qw(DB_File) # Breaks 
+    # @AnyDBM_File::ISA = qw(GDBM_File) # Breaks (not found on OSX)
+    @AnyDBM_File::ISA = qw(NDBM_File) # Breaks, but only sometimes. Locks up with 100% CPU usage (siege without -c) or children crash.
+    # @AnyDBM_File::ISA = qw(ODBM_File) # Breaks (not found on OSX)
 }
 use AnyDBM_File;
 use Fcntl; # needed for O_ thingies
@@ -18,6 +18,8 @@ use CHI;
 
 use Data::Random qw(:all);
  
+sub _gen_key_val;
+
 #
 # Sets the actions in this controller to be registered with no prefix
 # so they function identically to actions created in MyApp.pm
@@ -47,8 +49,7 @@ sub index :Path :Args(0) {
 
     tie my %DB, 'AnyDBM_File', '/tmp/corruptdb', O_RDWR|O_CREAT, 0666;
 
-    my $key = join(' ', rand_words( size => 120 ) );
-    my $val = $key;
+    my ($key, $val) = _gen_key_val;
 
     $DB{$key} = $val;
 
@@ -71,7 +72,7 @@ sub index :Path :Args(0) {
 
 }
 
-sub memcached : Local :Args(0) {
+sub memcached :Local {
     my ( $self, $c ) = @_;
     
     my $cache = CHI->new(
@@ -80,8 +81,7 @@ sub memcached : Local :Args(0) {
 	servers => [ '127.0.0.1:11211' ]
     );
 
-    my $key = join(' ', rand_words( size => 120 ) );
-    my $val = $key;
+    my ($key, $val) = _gen_key_val;
 
     $cache->set($key, $val, 'never');
 
@@ -99,6 +99,15 @@ sub memcached : Local :Args(0) {
     }
 
     $c->response->body( $answer );
+}
+
+sub _gen_key_val {
+    my $key = join('', rand_words( size => 10 ) );
+    $key = substr( $key, 0, 250); # memcached limitation
+
+    my $val = $key;
+
+    return ($key, $val);
 }
 
 =head2 default
